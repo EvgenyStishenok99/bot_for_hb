@@ -1,4 +1,5 @@
 const TelegramBot = require('node-telegram-bot-api');
+const schedule = require('node-schedule');
 const db = require('./database');
 require('dotenv').config();
 
@@ -24,6 +25,53 @@ function formatDate(dateString) {
   });
 }
 
+// --- Функция проверки дней рождений (вызывается в 8:00 МСК) ---
+async function checkBirthdays() {
+  console.log('🔍 Плановое напоминание о днях рождения...', new Date().toLocaleString('ru-RU'));
+  try {
+    const allBirthdays = db.getAllBirthdays();
+    const now = new Date();
+    const todayMonthDay = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const birthdaysToday = allBirthdays.filter(b => b.birth_date.substring(5) === todayMonthDay);
+
+    if (birthdaysToday.length === 0) {
+      console.log('📭 Сегодня дней рождений нет');
+      return;
+    }
+
+    // Группируем по чатам
+    const grouped = {};
+    for (const b of birthdaysToday) {
+      const chatId = b.chat_id;
+      if (!grouped[chatId]) grouped[chatId] = [];
+      grouped[chatId].push(b);
+    }
+
+    for (const [chatId, users] of Object.entries(grouped)) {
+      let message = '🎉 *СЕГОДНЯ ДЕНЬ РОЖДЕНИЯ!* 🎉\n\n';
+      users.forEach(u => {
+        const birthDate = new Date(u.birth_date);
+        const age = db.calculateAge(birthDate);
+        message += `🎂 *${u.name}* — ${age} ${getAgeWord(age)} 🎂\n`;
+      });
+      message += '\n✨ Не забудь поздравить! ✨';
+
+      await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+      console.log(`✅ Напоминание отправлено в чат ${chatId}`);
+    }
+  } catch (error) {
+    console.error('❌ Ошибка при отправке напоминания:', error);
+  }
+}
+
+// --- Ежедневная проверка в 8:00 утра по МОСКВЕ ---
+// Москва = UTC+3, поэтому 8:00 МСК = 5:00 UTC
+// Правило cron: минута час день месяц день_недели
+// '0 5 * * *' — каждый день в 5:00 UTC (8:00 МСК)
+schedule.scheduleJob('0 5 * * *', checkBirthdays);
+console.log('⏰ Запланирована ежедневная проверка дней рождений в 8:00 по московскому времени');
+
 // --- Команды бота ---
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
@@ -34,15 +82,38 @@ bot.onText(/\/start/, (msg) => {
 
 *Команды:*
 /add Имя ГГГГ-ММ-ДД — добавить день рождения
+   Пример: /add Мама 1975-03-15
+
 /list — показать все дни рождения с возрастами
+
 /next — показать ближайшие 7 дней рождений
+
 /today — показать, у кого сегодня день рождения
+
 /del Имя — удалить день рождения
+   Пример: /del Мама
+
 /help — показать это сообщение
 
 *Важно:* дату указывай в формате ГГГГ-ММ-ДД
     `;
   bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
+});
+
+bot.onText(/\/help/, (msg) => {
+  const chatId = msg.chat.id;
+  const helpMessage = `
+📖 *Справка по командам:*
+
+/add Имя ГГГГ-ММ-ДД — добавить день рождения
+/list — показать все дни рождения
+/next — ближайшие 7 дней
+/today — дни рождения сегодня
+/del Имя — удалить человека
+
+*Пример:* /add Анна 1990-05-20
+    `;
+  bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
 });
 
 bot.onText(/\/add (.+?) (.+)/, async (msg, match) => {
@@ -51,7 +122,7 @@ bot.onText(/\/add (.+?) (.+)/, async (msg, match) => {
   const dateStr = match[2].trim();
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    bot.sendMessage(chatId, '❌ Формат: ГГГГ-ММ-ДД');
+    bot.sendMessage(chatId, '❌ Формат: ГГГГ-ММ-ДД (например: 1990-05-20)');
     return;
   }
 
@@ -76,7 +147,7 @@ bot.onText(/\/list/, async (msg) => {
   try {
     const birthdays = db.getBirthdaysByChat(chatId.toString());
     if (birthdays.length === 0) {
-      bot.sendMessage(chatId, '📭 Список пуст');
+      bot.sendMessage(chatId, '📭 Список пуст. Добавьте командой /add');
       return;
     }
     let message = '🎂 *Список дней рождений:*\n\n';
@@ -180,3 +251,4 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 console.log('🤖 Бот запущен в режиме polling и готов к работе!');
+console.log('⏰ Напоминания приходят каждый день в 8:00 по московскому времени');
