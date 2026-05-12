@@ -1,71 +1,123 @@
-const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const db = require('./database');
 require('dotenv').config();
 
-const app = express();
-const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.BOT_TOKEN;
+const bot = new TelegramBot(TOKEN, { polling: true });
 
-// Настройка базы данных (SQLite будет работать, но помните — на Render'e файл БД не сохраняется между перезапусками!)
-const dbPath = path.join(__dirname, 'birthdays.db');
-const db = new sqlite3.Database(dbPath);
+// Функция для склонения слова "год"
+function getAgeWord(age) {
+  const lastDigit = age % 10;
+  const lastTwoDigits = age % 100;
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) return 'лет';
+  if (lastDigit === 1) return 'год';
+  if (lastDigit >= 2 && lastDigit <= 4) return 'года';
+  return 'лет';
+}
 
-// Инициализация БД (код из вашего database.js)
-db.run(`
-    CREATE TABLE IF NOT EXISTS birthdays (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        birth_date TEXT NOT NULL,
-        chat_id TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-`);
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+}
 
-// Функции работы с БД (скопируйте сюда все функции из database.js)
-// addBirthday, getBirthdaysByChat, calculateAge и т.д...
-
-// Создаем бота с webhook
-const bot = new TelegramBot(TOKEN);
-
-// Устанавливаем webhook
-const WEBHOOK_URL = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/webhook`;
-bot.setWebHook(WEBHOOK_URL).then(() => {
-  console.log(`✅ Webhook установлен: ${WEBHOOK_URL}`);
-}).catch(err => console.error('Ошибка webhook:', err));
-
-// Webhook endpoint для Telegram
-app.use(express.json());
-app.post('/webhook', (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// Health check для Render (важно для бесплатного тарифа!)
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
-// Обработчики команд (перенесите все ваши bot.onText сюда)
+// --- Команды бота ---
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, '🎉 Привет! Я бот-напоминалка о днях рождения!');
+  bot.sendMessage(chatId, '🎉 Привет! Я бот-напоминалка о днях рождения!\n\n/add Имя ГГГГ-ММ-ДД — добавить\n/list — показать всех\n/today — кто сегодня\n/next — ближайшие 7 дней\n/del Имя — удалить');
 });
 
 bot.onText(/\/add (.+?) (.+)/, async (msg, match) => {
-  // Ваш код добавления дня рождения
+  const chatId = msg.chat.id;
+  const name = match[1].trim();
+  const dateStr = match[2].trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    bot.sendMessage(chatId, '❌ Формат: ГГГГ-ММ-ДД');
+    return;
+  }
+
+  const birthDate = new Date(dateStr);
+  if (isNaN(birthDate.getTime())) {
+    bot.sendMessage(chatId, '❌ Неправильная дата');
+    return;
+  }
+
+  try {
+    db.addBirthday(name, dateStr, chatId.toString());
+    const age = db.calculateAge(birthDate);
+    bot.sendMessage(chatId, `✅ Добавлен ${name}: ${formatDate(dateStr)}\n🎂 Возраст: ${age} ${getAgeWord(age)}`);
+  } catch (error) {
+    bot.sendMessage(chatId, '❌ Ошибка при добавлении');
+    console.error(error);
+  }
 });
 
 bot.onText(/\/list/, async (msg) => {
-  // Ваш код показа списка
+  const chatId = msg.chat.id;
+  try {
+    const birthdays = db.getBirthdaysByChat(chatId.toString());
+    if (birthdays.length === 0) {
+      bot.sendMessage(chatId, '📭 Список пуст');
+      return;
+    }
+    let message = '🎂 *Список дней рождений:*\n\n';
+    birthdays.forEach(b => {
+      const birthDate = new Date(b.birth_date);
+      const age = db.calculateAge(birthDate);
+      message += `• *${b.name}*\n   📅 ${formatDate(b.birth_date)}\n   🎂 ${age} ${getAgeWord(age)}\n\n`;
+    });
+    message += `📊 *Всего:* ${birthdays.length} человек`;
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    bot.sendMessage(chatId, '❌ Ошибка');
+    console.error(error);
+  }
+});
+
+bot.onText(/\/today/, async (msg) => {
+  const chatId = msg.chat.id;
+  try {
+    const allBirthdays = db.getAllBirthdays();
+    const today = new Date();
+    const todayMonthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const birthdaysToday = allBirthdays.filter(b => b.birth_date.substring(5) === todayMonthDay && b.chat_id === chatId.toString());
+
+    if (birthdaysToday.length === 0) {
+      bot.sendMessage(chatId, '🎁 Сегодня нет дней рождений');
+      return;
+    }
+
+    let message = '🎉 *СЕГОДНЯ ДЕНЬ РОЖДЕНИЯ!* 🎉\n\n';
+    birthdaysToday.forEach(b => {
+      const birthDate = new Date(b.birth_date);
+      const age = db.calculateAge(birthDate);
+      message += `🎂 *${b.name}* — ${age} ${getAgeWord(age)} 🎂\n`;
+    });
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    bot.sendMessage(chatId, '❌ Ошибка');
+    console.error(error);
+  }
 });
 
 bot.onText(/\/del (.+)/, async (msg, match) => {
-  // Ваш код удаления
+  const chatId = msg.chat.id;
+  const name = match[1].trim();
+  try {
+    const deleted = db.deleteBirthdayByName(name, chatId.toString());
+    if (deleted > 0) {
+      bot.sendMessage(chatId, `✅ Удален ${name}`);
+    } else {
+      bot.sendMessage(chatId, `❌ Не найден ${name}`);
+    }
+  } catch (error) {
+    bot.sendMessage(chatId, '❌ Ошибка');
+    console.error(error);
+  }
 });
 
-// Запуск сервера
-app.listen(PORT, () => {
-  console.log(`🚀 Сервер запущен на порту ${PORT}`);
-});
+console.log('🤖 Бот запущен в режиме polling и готов к работе!');
