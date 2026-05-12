@@ -6,7 +6,6 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "better-sqlite3": "^9.6.0",
     "dotenv": "^16.3.1",
     "node-telegram-bot-api": "^0.64.0"
   }

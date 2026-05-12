@@ -25,18 +25,60 @@ function formatDate(dateString) {
 }
 
 // --- Команды бота ---
+
+// /start - приветствие
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, '🎉 Привет! Я бот-напоминалка о днях рождения!\n\n/add Имя ГГГГ-ММ-ДД — добавить\n/list — показать всех\n/today — кто сегодня\n/next — ближайшие 7 дней\n/del Имя — удалить');
+  const welcomeMessage = `
+🎉 *Привет! Я семейный бот-напоминалка с расчетом возраста!*
+
+Я буду напоминать тебе о днях рождения и автоматически считать, сколько лет исполняется.
+
+*Команды:*
+/add Имя ГГГГ-ММ-ДД — добавить день рождения
+   Пример: /add Мама 1975-03-15
+
+/list — показать все дни рождения с возрастами
+
+/next — показать ближайшие 7 дней рождений
+
+/today — показать, у кого сегодня день рождения
+
+/del Имя — удалить день рождения
+   Пример: /del Мама
+
+/help — показать это сообщение
+
+*Важно:* дату указывай в формате ГГГГ-ММ-ДД
+    `;
+  bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
 });
 
+// /help - справка
+bot.onText(/\/help/, (msg) => {
+  const chatId = msg.chat.id;
+  const helpMessage = `
+📖 *Справка по командам:*
+
+/add Имя ГГГГ-ММ-ДД — добавить день рождения
+/list — показать все дни рождения
+/next — ближайшие 7 дней
+/today — дни рождения сегодня
+/del Имя — удалить человека
+
+*Пример:* /add Анна 1990-05-20
+    `;
+  bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
+});
+
+// /add - добавить день рождения
 bot.onText(/\/add (.+?) (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const name = match[1].trim();
   const dateStr = match[2].trim();
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    bot.sendMessage(chatId, '❌ Формат: ГГГГ-ММ-ДД');
+    bot.sendMessage(chatId, '❌ Формат: ГГГГ-ММ-ДД (например: 1990-05-20)');
     return;
   }
 
@@ -48,19 +90,21 @@ bot.onText(/\/add (.+?) (.+)/, async (msg, match) => {
 
   try {
     db.addBirthday(name, dateStr, chatId.toString());
-    bot.sendMessage(chatId, `✅ Добавлен ${name}: ${formatDate(dateStr)}`);
+    const age = db.calculateAge(birthDate);
+    bot.sendMessage(chatId, `✅ Добавлен *${name}*: ${formatDate(dateStr)}\n🎂 Возраст: ${age} ${getAgeWord(age)}`, { parse_mode: 'Markdown' });
   } catch (error) {
     bot.sendMessage(chatId, '❌ Ошибка при добавлении');
     console.error(error);
   }
 });
 
+// /list - показать все дни рождения
 bot.onText(/\/list/, async (msg) => {
   const chatId = msg.chat.id;
   try {
     const birthdays = db.getBirthdaysByChat(chatId.toString());
     if (birthdays.length === 0) {
-      bot.sendMessage(chatId, '📭 Список пуст');
+      bot.sendMessage(chatId, '📭 Список пуст. Добавьте командой /add');
       return;
     }
     let message = '🎂 *Список дней рождений:*\n\n';
@@ -77,6 +121,7 @@ bot.onText(/\/list/, async (msg) => {
   }
 });
 
+// /today - дни рождения сегодня
 bot.onText(/\/today/, async (msg) => {
   const chatId = msg.chat.id;
   try {
@@ -103,32 +148,11 @@ bot.onText(/\/today/, async (msg) => {
   }
 });
 
+// /next - ближайшие дни рождения
 bot.onText(/\/next/, async (msg) => {
   const chatId = msg.chat.id;
   try {
-    const allBirthdays = db.getAllBirthdays();
-    const today = new Date();
-    const upcoming = [];
-
-    for (const b of allBirthdays) {
-      if (b.chat_id !== chatId.toString()) continue;
-      const birthDate = new Date(b.birth_date);
-      const nextBirthday = new Date(today);
-      nextBirthday.setFullYear(today.getFullYear());
-      nextBirthday.setMonth(birthDate.getMonth());
-      nextBirthday.setDate(birthDate.getDate());
-
-      if (nextBirthday < today) {
-        nextBirthday.setFullYear(today.getFullYear() + 1);
-      }
-
-      const daysDiff = Math.ceil((nextBirthday - today) / (1000 * 60 * 60 * 24));
-      if (daysDiff <= 7) {
-        upcoming.push({ name: b.name, days: daysDiff, birth_date: b.birth_date });
-      }
-    }
-
-    upcoming.sort((a, b) => a.days - b.days);
+    const upcoming = db.getUpcomingBirthdays(chatId.toString(), 7);
 
     if (upcoming.length === 0) {
       bot.sendMessage(chatId, '📭 В ближайшие 7 дней нет дней рождений');
@@ -137,12 +161,15 @@ bot.onText(/\/next/, async (msg) => {
 
     let message = '🎯 *Ближайшие дни рождения:*\n\n';
     upcoming.forEach(u => {
-      if (u.days === 0) {
-        message += `🎉 *СЕГОДНЯ!* ${u.name}\n`;
-      } else if (u.days === 1) {
-        message += `⭐ *ЗАВТРА!* ${u.name}\n`;
+      const birthDate = new Date(u.birth_date);
+      const nextAge = db.calculateAge(birthDate) + 1;
+
+      if (u.daysUntil === 0) {
+        message += `🎉 *СЕГОДНЯ!* ${u.name} — ${nextAge} ${getAgeWord(nextAge)}\n\n`;
+      } else if (u.daysUntil === 1) {
+        message += `⭐ *ЗАВТРА!* ${u.name} — ${nextAge} ${getAgeWord(nextAge)}\n\n`;
       } else {
-        message += `📅 *Через ${u.days} дней:* ${u.name}\n`;
+        message += `📅 *Через ${u.daysUntil} дней:* ${u.name} — ${nextAge} ${getAgeWord(nextAge)}\n`;
       }
     });
 
@@ -153,15 +180,16 @@ bot.onText(/\/next/, async (msg) => {
   }
 });
 
+// /del - удалить день рождения
 bot.onText(/\/del (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const name = match[1].trim();
   try {
     const deleted = db.deleteBirthdayByName(name, chatId.toString());
     if (deleted > 0) {
-      bot.sendMessage(chatId, `✅ Удален ${name}`);
+      bot.sendMessage(chatId, `✅ Удален *${name}*`, { parse_mode: 'Markdown' });
     } else {
-      bot.sendMessage(chatId, `❌ Не найден ${name}`);
+      bot.sendMessage(chatId, `❌ Не найден *${name}*`, { parse_mode: 'Markdown' });
     }
   } catch (error) {
     bot.sendMessage(chatId, '❌ Ошибка');
@@ -169,5 +197,5 @@ bot.onText(/\/del (.+)/, async (msg, match) => {
   }
 });
 
-console.log('🤖 Бот запущен в режиме polling и готов к работе!');
-console.log('✅ Никаких вебхуков, только polling');
+console.log('🤖 Бот запущен и готов к работе!');
+console.log('📝 Команды: /start, /add, /list, /today, /next, /del');
