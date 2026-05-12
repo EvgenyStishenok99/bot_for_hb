@@ -48,8 +48,7 @@ bot.onText(/\/add (.+?) (.+)/, async (msg, match) => {
 
   try {
     db.addBirthday(name, dateStr, chatId.toString());
-    const age = db.calculateAge(birthDate);
-    bot.sendMessage(chatId, `✅ Добавлен ${name}: ${formatDate(dateStr)}\n🎂 Возраст: ${age} ${getAgeWord(age)}`);
+    bot.sendMessage(chatId, `✅ Добавлен ${name}: ${formatDate(dateStr)}`);
   } catch (error) {
     bot.sendMessage(chatId, '❌ Ошибка при добавлении');
     console.error(error);
@@ -104,6 +103,56 @@ bot.onText(/\/today/, async (msg) => {
   }
 });
 
+bot.onText(/\/next/, async (msg) => {
+  const chatId = msg.chat.id;
+  try {
+    const allBirthdays = db.getAllBirthdays();
+    const today = new Date();
+    const upcoming = [];
+
+    for (const b of allBirthdays) {
+      if (b.chat_id !== chatId.toString()) continue;
+      const birthDate = new Date(b.birth_date);
+      const nextBirthday = new Date(today);
+      nextBirthday.setFullYear(today.getFullYear());
+      nextBirthday.setMonth(birthDate.getMonth());
+      nextBirthday.setDate(birthDate.getDate());
+
+      if (nextBirthday < today) {
+        nextBirthday.setFullYear(today.getFullYear() + 1);
+      }
+
+      const daysDiff = Math.ceil((nextBirthday - today) / (1000 * 60 * 60 * 24));
+      if (daysDiff <= 7) {
+        upcoming.push({ name: b.name, days: daysDiff, birth_date: b.birth_date });
+      }
+    }
+
+    upcoming.sort((a, b) => a.days - b.days);
+
+    if (upcoming.length === 0) {
+      bot.sendMessage(chatId, '📭 В ближайшие 7 дней нет дней рождений');
+      return;
+    }
+
+    let message = '🎯 *Ближайшие дни рождения:*\n\n';
+    upcoming.forEach(u => {
+      if (u.days === 0) {
+        message += `🎉 *СЕГОДНЯ!* ${u.name}\n`;
+      } else if (u.days === 1) {
+        message += `⭐ *ЗАВТРА!* ${u.name}\n`;
+      } else {
+        message += `📅 *Через ${u.days} дней:* ${u.name}\n`;
+      }
+    });
+
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    bot.sendMessage(chatId, '❌ Ошибка');
+    console.error(error);
+  }
+});
+
 bot.onText(/\/del (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const name = match[1].trim();
@@ -121,3 +170,4 @@ bot.onText(/\/del (.+)/, async (msg, match) => {
 });
 
 console.log('🤖 Бот запущен в режиме polling и готов к работе!');
+console.log('✅ Никаких вебхуков, только polling');
