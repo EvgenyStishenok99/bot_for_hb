@@ -25,8 +25,6 @@ function formatDate(dateString) {
 }
 
 // --- Команды бота ---
-
-// /start - приветствие
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   const welcomeMessage = `
@@ -36,17 +34,10 @@ bot.onText(/\/start/, (msg) => {
 
 *Команды:*
 /add Имя ГГГГ-ММ-ДД — добавить день рождения
-   Пример: /add Мама 1975-03-15
-
 /list — показать все дни рождения с возрастами
-
 /next — показать ближайшие 7 дней рождений
-
 /today — показать, у кого сегодня день рождения
-
 /del Имя — удалить день рождения
-   Пример: /del Мама
-
 /help — показать это сообщение
 
 *Важно:* дату указывай в формате ГГГГ-ММ-ДД
@@ -54,31 +45,13 @@ bot.onText(/\/start/, (msg) => {
   bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
 });
 
-// /help - справка
-bot.onText(/\/help/, (msg) => {
-  const chatId = msg.chat.id;
-  const helpMessage = `
-📖 *Справка по командам:*
-
-/add Имя ГГГГ-ММ-ДД — добавить день рождения
-/list — показать все дни рождения
-/next — ближайшие 7 дней
-/today — дни рождения сегодня
-/del Имя — удалить человека
-
-*Пример:* /add Анна 1990-05-20
-    `;
-  bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
-});
-
-// /add - добавить день рождения
 bot.onText(/\/add (.+?) (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const name = match[1].trim();
   const dateStr = match[2].trim();
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    bot.sendMessage(chatId, '❌ Формат: ГГГГ-ММ-ДД (например: 1990-05-20)');
+    bot.sendMessage(chatId, '❌ Формат: ГГГГ-ММ-ДД');
     return;
   }
 
@@ -98,13 +71,12 @@ bot.onText(/\/add (.+?) (.+)/, async (msg, match) => {
   }
 });
 
-// /list - показать все дни рождения
 bot.onText(/\/list/, async (msg) => {
   const chatId = msg.chat.id;
   try {
     const birthdays = db.getBirthdaysByChat(chatId.toString());
     if (birthdays.length === 0) {
-      bot.sendMessage(chatId, '📭 Список пуст. Добавьте командой /add');
+      bot.sendMessage(chatId, '📭 Список пуст');
       return;
     }
     let message = '🎂 *Список дней рождений:*\n\n';
@@ -121,7 +93,6 @@ bot.onText(/\/list/, async (msg) => {
   }
 });
 
-// /today - дни рождения сегодня
 bot.onText(/\/today/, async (msg) => {
   const chatId = msg.chat.id;
   try {
@@ -148,7 +119,6 @@ bot.onText(/\/today/, async (msg) => {
   }
 });
 
-// /next - ближайшие дни рождения
 bot.onText(/\/next/, async (msg) => {
   const chatId = msg.chat.id;
   try {
@@ -180,7 +150,6 @@ bot.onText(/\/next/, async (msg) => {
   }
 });
 
-// /del - удалить день рождения
 bot.onText(/\/del (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   const name = match[1].trim();
@@ -197,5 +166,17 @@ bot.onText(/\/del (.+)/, async (msg, match) => {
   }
 });
 
-console.log('🤖 Бот запущен и готов к работе!');
-console.log('📝 Команды: /start, /add, /list, /today, /next, /del');
+// --- Минимальный веб-сервер для Render (чтобы не было таймаута) ---
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Веб-сервер для health check запущен на порту ${PORT}`);
+});
+
+console.log('🤖 Бот запущен в режиме polling и готов к работе!');
