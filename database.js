@@ -1,76 +1,68 @@
-const fs = require('fs');
-const path = require('path');
+// database.js - фиксированный список дней рождений
+// Без подписок, просто данные
 
-const dbPath = path.join(__dirname, 'birthdays.json');
+const birthdaysData = [
+  { name: "Тётя_Лиля", birth_date: "1950-01-05" },
+  { name: "Дядя_Саша", birth_date: "1973-01-06" },
+  { name: "Ира_Богатова", birth_date: "1987-01-08" },
+  { name: "Ульяна", birth_date: "2008-01-10" },
+  { name: "Жэка", birth_date: "1999-02-02" },
+  { name: "Тётя_Аня", birth_date: "1979-02-08" },
+  { name: "Бабушка_Рая", birth_date: "1951-03-30" },
+  { name: "Таня_Яновская", birth_date: "1998-04-02" },
+  { name: "Кушнирук_Юра", birth_date: "1984-04-17" },
+  { name: "Дядя_Ваня", birth_date: "1952-04-25" },
+  { name: "Витюша", birth_date: "2014-05-06" },
+  { name: "Дима_Стишенок", birth_date: "1995-05-07" },
+  { name: "Анжела", birth_date: "1963-05-29" },
+  { name: "Олег", birth_date: "2010-05-31" },
+  { name: "Отец", birth_date: "1975-06-03" },
+  { name: "Дима_Раевский", birth_date: "2000-06-09" },
+  { name: "Яновская_Юля", birth_date: "1975-07-01" },
+  { name: "Стишенок_Галя", birth_date: "1971-07-06" },
+  { name: "Мать", birth_date: "1976-08-02" },
+  { name: "Игорь_Кукушкин", birth_date: "1974-08-19" },
+  { name: "полинка", birth_date: "2006-08-23" },
+  { name: "Раевский_Коля", birth_date: "1966-11-10" },
+  { name: "Богатов_Вадик", birth_date: "1987-11-12" },
+  { name: "Вероника_Стишенок", birth_date: "1999-11-17" },
+  { name: "Лариса", birth_date: "1962-11-28" },
+  { name: "Дедушка_Костя", birth_date: "1947-12-01" }
+];
 
-// Загрузка данных из файла
-function loadData() {
-  if (!fs.existsSync(dbPath)) {
-    return [];
-  }
-  const data = fs.readFileSync(dbPath, 'utf8');
-  return JSON.parse(data);
-}
+// СЮДА ВСТАВЬТЕ chat_id вашего семейного чата (цифру)
+const FAMILY_CHAT_ID = 000000000;  // ← ЗАМЕНИТЕ НА РЕАЛЬНЫЙ chat_id!
 
-// Сохранение данных в файл
-function saveData(data) {
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-}
-
-// Добавить день рождения
-function addBirthday(name, birthDate, chatId) {
-  const data = loadData();
-  data.push({
-    name: name,
-    birth_date: birthDate,
-    chat_id: chatId,
-    id: Date.now(),
-    created_at: new Date().toISOString()
-  });
-  saveData(data);
-  return { lastInsertRowid: Date.now() };
-}
-
-// Получить все дни рождения
 function getAllBirthdays() {
-  return loadData();
+  return birthdaysData;
 }
 
-// Получить дни рождения по чату
 function getBirthdaysByChat(chatId) {
-  const data = loadData();
-  return data.filter(b => b.chat_id === chatId);
+  return birthdaysData;
 }
 
-// Удалить день рождения
-function deleteBirthdayByName(name, chatId) {
-  const data = loadData();
-  const filtered = data.filter(b => !(b.name === name && b.chat_id === chatId));
-  const deleted = data.length - filtered.length;
-  saveData(filtered);
-  return deleted;
+function getFamilyChatId() {
+  return FAMILY_CHAT_ID;
 }
 
-// Вычисление возраста
+function addBirthday() { return null; }
+function deleteBirthdayByName() { return 0; }
+
 function calculateAge(birthDate) {
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
   const monthDiff = today.getMonth() - birthDate.getMonth();
-
   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
     age--;
   }
   return age;
 }
 
-// Получить ближайшие дни рождения (для команды /next)
-function getUpcomingBirthdays(chatId, days = 7) {
-  const data = loadData();
-  const chatBirthdays = data.filter(b => b.chat_id === chatId);
+function getUpcomingBirthdays(days = 7) {
   const today = new Date();
   const upcoming = [];
 
-  for (const b of chatBirthdays) {
+  for (const b of birthdaysData) {
     const birthDate = new Date(b.birth_date);
     const nextBirthday = new Date(today);
     nextBirthday.setFullYear(today.getFullYear());
@@ -96,10 +88,11 @@ function getUpcomingBirthdays(chatId, days = 7) {
 }
 
 module.exports = {
-  addBirthday,
   getAllBirthdays,
-  deleteBirthdayByName,
   getBirthdaysByChat,
+  getFamilyChatId,
   calculateAge,
-  getUpcomingBirthdays
+  getUpcomingBirthdays,
+  addBirthday,
+  deleteBirthdayByName
 };
