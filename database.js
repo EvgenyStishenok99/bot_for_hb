@@ -1,5 +1,4 @@
 // database.js - фиксированный список дней рождений
-// Без подписок, просто данные
 
 const birthdaysData = [
   { name: "Тётя_Лиля", birth_date: "1950-01-05" },
@@ -30,23 +29,16 @@ const birthdaysData = [
   { name: "Дедушка_Костя", birth_date: "1947-12-01" }
 ];
 
-// СЮДА ВСТАВЬТЕ chat_id вашего семейного чата (цифру)
-const FAMILY_CHAT_ID = 000000000;  // ← ЗАМЕНИТЕ НА РЕАЛЬНЫЙ chat_id!
+// ВАШ CHAT_ID (скопируйте сюда полученное значение)
+const FAMILY_CHAT_ID = -1003400604265;  // ← ВАШ ID
 
 function getAllBirthdays() {
-  return birthdaysData;
-}
-
-function getBirthdaysByChat(chatId) {
   return birthdaysData;
 }
 
 function getFamilyChatId() {
   return FAMILY_CHAT_ID;
 }
-
-function addBirthday() { return null; }
-function deleteBirthdayByName() { return 0; }
 
 function calculateAge(birthDate) {
   const today = new Date();
@@ -89,10 +81,7 @@ function getUpcomingBirthdays(days = 7) {
 
 module.exports = {
   getAllBirthdays,
-  getBirthdaysByChat,
   getFamilyChatId,
   calculateAge,
-  getUpcomingBirthdays,
-  addBirthday,
-  deleteBirthdayByName
+  getUpcomingBirthdays
 };
