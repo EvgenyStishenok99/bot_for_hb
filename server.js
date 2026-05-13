@@ -254,8 +254,4 @@ console.log('🤖 Бот запущен в режиме polling и готов к
 console.log('⏰ Напоминания приходят каждый день в 8:00 по московскому времени');
 
 
-bot.onText(/\/chatid/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, `Ваш chat_id: \`${chatId}\``, { parse_mode: 'Markdown' });
-  console.log(`Пользователь ${msg.chat.username || msg.chat.first_name} запросил chat_id: ${chatId}`);
-});
+;
