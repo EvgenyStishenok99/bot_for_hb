@@ -1,14 +1,10 @@
-const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const schedule = require('node-schedule');
 const db = require('./database');
 require('dotenv').config();
 
 const TOKEN = process.env.BOT_TOKEN;
-const bot = new TelegramBot(TOKEN); // Без polling!
-
-const app = express();
-app.use(express.json());
+const bot = new TelegramBot(TOKEN, { polling: true });
 
 const FAMILY_CHAT_ID = db.getFamilyChatId();
 
@@ -30,15 +26,12 @@ function formatDate(dateString) {
   });
 }
 
-// --- Функция отправки напоминания ---
 async function sendBirthdayReminder() {
   console.log('🔍 Проверка дней рождений...', new Date().toLocaleString('ru-RU'));
-
   try {
     const allBirthdays = db.getAllBirthdays();
     const now = new Date();
     const todayMonthDay = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
     const birthdaysToday = allBirthdays.filter(b => b.birth_date.substring(5) === todayMonthDay);
 
     if (birthdaysToday.length === 0) {
@@ -56,20 +49,19 @@ async function sendBirthdayReminder() {
 
     await bot.sendMessage(FAMILY_CHAT_ID, message, { parse_mode: 'Markdown' });
     console.log(`✅ Напоминание отправлено в чат ${FAMILY_CHAT_ID}`);
-
   } catch (error) {
     console.error('❌ Ошибка:', error.message);
   }
 }
 
-// --- Планировщик (каждый день в 8:00 МСК = 5:00 UTC) ---
+// Планировщик в 8:00 МСК (5:00 UTC)
 schedule.scheduleJob('0 5 * * *', sendBirthdayReminder);
 console.log('⏰ Напоминания настроены на 8:00 по московскому времени');
 
-// --- Команды бота ---
+// --- Команды ---
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id,
-    `🎉 *Семейный бот-напоминалка!*\n\nКаждый день в 8:00 я буду присылать список именинников.\n\n/list — все дни рождения\n/today — кто сегодня\n/next — ближайшие 7 дней`,
+    `🎉 *Семейный бот-напоминалка!*\n\n/list — все дни рождения\n/today — кто сегодня\n/next — ближайшие 7 дней`,
     { parse_mode: 'Markdown' }
   );
 });
@@ -130,19 +122,15 @@ bot.onText(/\/next/, (msg) => {
   bot.sendMessage(msg.chat.id, message, { parse_mode: 'Markdown' });
 });
 
-// --- Webhook endpoint ---
-app.post('/webhook', (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
+// --- Минимальный веб-сервер для Render (чтобы не было таймаута) ---
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-// --- Health check ---
 app.get('/health', (req, res) => res.send('OK'));
 
-// --- Запуск сервера ---
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Сервер запущен на порту ${PORT}`);
-  console.log(`📋 В базе ${db.getAllBirthdays().length} дней рождений`);
-  console.log(`🏠 Семейный чат ID: ${FAMILY_CHAT_ID}`);
+  console.log(`✅ Health check сервер запущен на порту ${PORT}`);
 });
+
+console.log('🤖 Бот запущен в режиме polling и готов к работе!');
